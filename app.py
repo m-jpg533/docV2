@@ -1,3 +1,4 @@
+
 from flask import Flask, request, jsonify, render_template
 import sqlite3
 from datetime import datetime
@@ -5,32 +6,42 @@ from urllib.parse import unquote
 import requests
 import os
 
-
 app = Flask(__name__)
 DB = "database.db"
 
-# ===== LINE（可選）=====
+# ===== LINE 設定 =====
 LINE_TOKEN = os.getenv("LINE_TOKEN")
 LINE_USER_ID = os.getenv("USER_ID")
-@app.route("/test_line")
-def test_line():
-    send_line("SOC 測試成功🔥")
-    return "ok"
+
 def send_line(msg):
-    if not LINE_TOKEN:
+    if not LINE_TOKEN or not LINE_USER_ID:
+        print("LINE 設定錯誤")
         return
+
     url = "https://api.line.me/v2/bot/message/push"
     headers = {
         "Authorization": f"Bearer {LINE_TOKEN}",
         "Content-Type": "application/json"
     }
     data = {
-    "to": LINE_USER_ID,   ✅
-    "messages":[{"type":"text","text":msg}]
-}
-    requests.post(url, headers=headers, json=data)
+        "to": LINE_USER_ID,
+        "messages": [
+            {"type": "text", "text": msg}
+        ]
+    }
 
-# ===== 初始化 DB =====
+    try:
+        requests.post(url, headers=headers, json=data, timeout=3)
+    except Exception as e:
+        print("LINE 發送失敗:", e)
+
+# ===== 測試 LINE =====
+@app.route("/test_line")
+def test_line():
+    send_line("SOC 測試成功")
+    return "ok"
+
+# ===== 初始化資料庫 =====
 def init_db():
     conn = sqlite3.connect(DB)
     c = conn.cursor()
@@ -76,6 +87,7 @@ def detect_attack(path, args):
 def soc():
     ua = request.headers.get("User-Agent", "").lower()
 
+    # 忽略 LINE / FB 爬蟲
     if "facebookexternalhit" in ua or "line" in ua:
         return
 
@@ -86,21 +98,27 @@ def soc():
 
     if attack_type != "NORMAL":
         ip = request.headers.get("X-Forwarded-For", request.remote_addr)
-
         country = get_country(ip)
 
-        print(f"🚨 {attack_type} {level} {ip} {country}")
+        print(f"ALERT {attack_type} {level} {ip} {country}")
 
         conn = sqlite3.connect(DB)
         c = conn.cursor()
         c.execute("""
         INSERT INTO attacks (ip, country, type, level, path, time)
         VALUES (?, ?, ?, ?, ?, ?)
-        """, (ip, country, attack_type, level, path, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+        """, (ip, country, attack_type, level, path,
+              datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
         conn.commit()
         conn.close()
 
-        send_line(f"🚨{attack_type}\nIP:{ip}\n國家:{country}\n等級:{level}")
+        send_line(
+            f"SOC 警報\n"
+            f"類型: {attack_type}\n"
+            f"IP: {ip}\n"
+            f"國家: {country}\n"
+            f"等級: {level}"
+        )
 
 # ===== API =====
 @app.route("/attacks")
@@ -120,7 +138,8 @@ def dashboard():
 # ===== 首頁 =====
 @app.route("/")
 def home():
-    return "SOC v2 Running 😎"
+    return "SOC v2 Running"
 
+# ===== 啟動 =====
 if __name__ == "__main__":
     app.run()
