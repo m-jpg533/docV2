@@ -12,7 +12,10 @@ DB = "database.db"
 # ===== LINE（可選）=====
 LINE_TOKEN = os.getenv("LINE_TOKEN")
 LINE_USER_ID = os.getenv("USER_ID")
-
+@app.route("/test_line")
+def test_line():
+    send_line("SOC 測試成功🔥")
+    return "ok"
 def send_line(msg):
     if not LINE_TOKEN:
         return
@@ -22,9 +25,9 @@ def send_line(msg):
         "Content-Type": "application/json"
     }
     data = {
-        "to": "你的UserID",
-        "messages":[{"type":"text","text":msg}]
-    }
+    "to": LINE_USER_ID,   ✅
+    "messages":[{"type":"text","text":msg}]
+}
     requests.post(url, headers=headers, json=data)
 
 # ===== 初始化 DB =====
