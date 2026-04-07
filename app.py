@@ -11,7 +11,7 @@ DB = "database.db"
 
 # ===== LINE（可選）=====
 LINE_TOKEN = os.getenv("LINE_TOKEN")
-LINE_USER_ID = os.getenv("LINE_USER_ID")
+LINE_USER_ID = os.getenv("USER_ID")
 
 def send_line(msg):
     if not LINE_TOKEN:
