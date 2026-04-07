@@ -68,8 +68,16 @@ init_db()
 # ===== IP → 國家 =====
 def get_country(ip):
     try:
-        res = requests.get(f"http://ip-api.com/json/{ip}", timeout=2).json()
+        # 主 API
+        res = requests.get(f"https://ipapi.co/{ip}/json/", timeout=2).json()
+        country = res.get("country_name")
+        if country:
+            return country
+
+        # 備用 API
+        res = requests.get(f"https://ipinfo.io/{ip}/json", timeout=2).json()
         return res.get("country", "Unknown")
+
     except:
         return "Unknown"
 
