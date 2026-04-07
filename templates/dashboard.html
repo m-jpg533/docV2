@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>SOC v2</title>
+
+<style>
+body { background:#0b0f1a; color:white; font-family:Arial; }
+table { width:100%; }
+th, td { padding:10px; border-bottom:1px solid #333; }
+
+.high { color:red; }
+.medium { color:orange; }
+.low { color:gray; }
+
+</style>
+</head>
+
+<body>
+
+<h2>🚨 SOC v2 監控系統</h2>
+
+<table>
+<tr>
+<th>IP</th>
+<th>國家</th>
+<th>類型</th>
+<th>等級</th>
+<th>路徑</th>
+<th>時間</th>
+</tr>
+
+<tbody id="data"></tbody>
+</table>
+
+<script>
+async function load(){
+    let res = await fetch("/attacks");
+    let data = await res.json();
+
+    let html = "";
+
+    data.forEach(r=>{
+        html += `
+        <tr>
+        <td>${r[0]}</td>
+        <td>${r[1]}</td>
+        <td>${r[2]}</td>
+        <td class="${r[3].toLowerCase()}">${r[3]}</td>
+        <td>${r[4]}</td>
+        <td>${r[5]}</td>
+        </tr>`;
+    });
+
+    document.getElementById("data").innerHTML = html;
+}
+
+setInterval(load,2000);
+load();
+</script>
+
+</body>
+</html>
