@@ -11,9 +11,18 @@ def get_ip_location(ip):
     try:
         r = requests.get(f"http://ip-api.com/json/{ip}", timeout=2)
         data = r.json()
-        return data.get("lat"), data.get("lon")
+
+        lat = data.get("lat")
+        lon = data.get("lon")
+
+        # 🔥 重點：如果抓不到 → 給預設位置
+        if lat is None or lon is None:
+            return 25.03, 121.56  # 台灣
+
+        return lat, lon
+
     except:
-        return None, None
+        return 25.03, 121.56  # fallback
 
 # 🔥 首頁（地圖）
 @app.route("/")
