@@ -1,57 +1,165 @@
+
 from flask import Flask, request, jsonify, render_template
+import sqlite3
+from datetime import datetime
+from urllib.parse import unquote
 import requests
+import os
+
+
+app = Flask(__name__)
+DB = "database.db"
+
+# ===== LINE（可選）=====
+LINE_TOKEN = os.getenv("LINE_TOKEN")
+LINE_USER_ID = os.getenv("USER_ID")
+@app.route("/test_line")
+def test_line():
+    send_line("SOC 測試成功🔥")
+    return "ok"
+def send_line(msg):
+    if not LINE_TOKEN:
+        return
+    url = "https://api.line.me/v2/bot/message/push"
+    headers = {
+        "Authorization": f"Bearer {LINE_TOKEN}",
+        "Content-Type": "application/json"
+    }
+    
+    data = {
+    "to": LINE_USER_ID,   ✅
+    "messages":[{"type":"text","text":msg}]
+}
+    requests.post(url, headers=headers, json=data)
+
+# ===== 初始化 DB =====
+def init_db():
+    conn = sqlite3.connect(DB)
+    c = conn.cursor()
+
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS attacks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ip TEXT,
+        country TEXT,
+        type TEXT,
+        level TEXT,
+        path TEXT,
+        time TEXT
+    )
+    """)
+
+    conn.commit()
+    conn.close()
+
+init_db()
+
+# ===== IP → 國家 =====
+
+from flask import Flask, request, jsonify, render_template
+import datetime
+import socket
+import requests
+import os
 
 app = Flask(__name__)
 
-attack_logs = []
+attacks = []
 
-# 🔥 IP 定位
-def get_ip_location(ip):
+# 🔐 LINE Token（⚠️ 放你自己的）
+LINE_TOKEN = "你的_LINE_NOTIFY_TOKEN"
+
+# 🌍 IP 查位置
+def get_ip_info(ip):
     try:
-        r = requests.get(f"http://ip-api.com/json/{ip}", timeout=2)
-        data = r.json()
-
-        lat = data.get("lat")
-        lon = data.get("lon")
-
-        if lat is None or lon is None:
-            return 25.03, 121.56  # fallback
-
-        return lat, lon
+        res = requests.get(f"http://ip-api.com/json/{ip}", timeout=3).json()
+        return {
+            "country": res.get("country", "Unknown"),
+            "city": res.get("city", "Unknown"),
+            "lat": res.get("lat", 0),
+            "lon": res.get("lon", 0)
+        }
     except:
-        return 25.03, 121.56
+        return {"country": "Unknown", "city": "Unknown", "lat": 0, "lon": 0}
 
-# 🔥 偵測攻擊
-@app.before_request
-def detect_attack():
-    q = request.args.get("q", "")
+# 🌐 DNS 解析
+def get_dns(ip):
+    try:
+        return socket.gethostbyaddr(ip)[0]
+    except:
+        return "Unknown"
 
-    if "<script>" in q.lower():
-        ip = request.headers.get("X-Forwarded-For", request.remote_addr)
+# 🚨 LINE 通知
+def send_line(msg):
+    try:
+        requests.post(
+            "https://notify-api.line.me/api/notify",
+            headers={"Authorization": f"Bearer {LINE_TOKEN}"},
+            data={"message": msg},
+            timeout=3
+        )
+    except:
+        pass
 
-        if ip and "," in ip:
-            ip = ip.split(",")[0]
+# 🔍 攻擊偵測
+def detect_attack(q):
+    q = q.lower()
+    if "<script>" in q:
+        return "XSS"
+    if "union" in q or "' or 1=1" in q:
+        return "SQL Injection"
+    return None
 
-        lat, lon = get_ip_location(ip)
-
-        attack_logs.append({
-            "ip": ip,
-            "type": "XSS",
-            "lat": lat,
-            "lon": lon
-        })
-
-        print("🚨 XSS 攻擊:", ip)
-
-# 🔥 API
-@app.route("/api/attacks")
-def api_attacks():
-    return jsonify(attack_logs)
-
-# 🔥 Dashboard
 @app.route("/")
-def dashboard():
-    return render_template("dashboard.html")
+def home():
+    q = request.args.get("q", "")
+    ip = request.headers.get("X-Forwarded-For", request.remote_addr)
 
+    attack_type = detect_attack(q)
+
+    if attack_type:
+        info = get_ip_info(ip)
+        dns = get_dns(ip)
+
+        data = {
+            "time": str(datetime.datetime.now()),
+            "ip": ip,
+            "dns": dns,
+            "type": attack_type,
+            "country": info["country"],
+            "city": info["city"],
+            "lat": info["lat"],
+            "lon": info["lon"]
+        }
+
+        attacks.append(data)
+
+        print(f"🚨 {attack_type}: {ip}")
+
+        # 🔥 LINE 推播
+        msg = f"""
+🚨 SOC 警報
+類型: {attack_type}
+IP: {ip}
+DNS: {dns}
+國家: {info['country']} {info['city']}
+時間: {data['time']}
+"""
+        send_line(msg)
+
+    return render_template("index.html")
+
+@app.route("/api/attacks")
+def api():
+    return jsonify(attacks)
+
+# ❤️ 健康檢查（Render不卡）
+@app.route("/health")
+def health():
+    return "OK", 200
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
 if __name__ == "__main__":
     app.run()
