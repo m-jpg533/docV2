@@ -1,62 +1,113 @@
+
 <!DOCTYPE html>
-<html>
+<html lang="zh-TW">
 <head>
 <meta charset="UTF-8">
-<title>SOC v2</title>
+<title>🔥 SOC v3 攻擊地圖</title>
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<!-- Leaflet 地圖 -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
 
 <style>
-body { background:#0b0f1a; color:white; font-family:Arial; }
-table { width:100%; }
-th, td { padding:10px; border-bottom:1px solid #333; }
+body {
+    margin: 0;
+    font-family: Arial;
+    background: #0b0f1a;
+    color: white;
+}
 
-.high { color:red; }
-.medium { color:orange; }
-.low { color:gray; }
+#map {
+    height: 100vh;
+}
 
+#title {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    z-index: 999;
+    background: rgba(0,0,0,0.6);
+    padding: 10px;
+    border-radius: 10px;
+}
 </style>
 </head>
 
 <body>
 
-<h2>🚨 SOC v2 監控系統</h2>
+<div id="title">
+    <h2>🌍 SOC 即時攻擊地圖</h2>
+    <div id="count">載入中...</div>
+</div>
 
-<table>
-<tr>
-<th>IP</th>
-<th>國家</th>
-<th>類型</th>
-<th>等級</th>
-<th>路徑</th>
-<th>時間</th>
-</tr>
+<div id="map"></div>
 
-<tbody id="data"></tbody>
-</table>
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
 <script>
-async function load(){
-    let res = await fetch("/attacks");
-    let data = await res.json();
+const map = L.map('map').setView([20, 0], 2);
 
-    let html = "";
+// 地圖底圖
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 18
+}).addTo(map);
 
-    data.forEach(r=>{
-        html += `
-        <tr>
-        <td>${r[0]}</td>
-        <td>${r[1]}</td>
-        <td>${r[2]}</td>
-        <td class="${r[3].toLowerCase()}">${r[3]}</td>
-        <td>${r[4]}</td>
-        <td>${r[5]}</td>
-        </tr>`;
-    });
+let markers = [];
 
-    document.getElementById("data").innerHTML = html;
+// 顏色判斷
+function getColor(level) {
+    if (level === "CRITICAL") return "red";
+    if (level === "HIGH") return "orange";
+    if (level === "MEDIUM") return "yellow";
+    return "blue";
 }
 
-setInterval(load,2000);
-load();
+// 載入攻擊資料
+async function loadData() {
+    try {
+        const res = await fetch("/attacks");
+        const data = await res.json();
+
+        document.getElementById("count").innerText =
+            "攻擊數量: " + data.length;
+
+        // 清掉舊點
+        markers.forEach(m => map.removeLayer(m));
+        markers = [];
+
+        data.forEach(item => {
+            const [ip, country, lat, lon, type, level, path, time] = item;
+
+            if (!lat || !lon) return;
+
+            const marker = L.circleMarker([lat, lon], {
+                radius: 6,
+                color: getColor(level),
+                fillOpacity: 0.8
+            }).addTo(map);
+
+            marker.bindPopup(`
+                <b>IP:</b> ${ip}<br>
+                <b>國家:</b> ${country}<br>
+                <b>類型:</b> ${type}<br>
+                <b>等級:</b> ${level}<br>
+                <b>時間:</b> ${time}
+            `);
+
+            markers.push(marker);
+        });
+
+    } catch (e) {
+        console.error("載入失敗", e);
+    }
+}
+
+// 每5秒更新
+setInterval(loadData, 5000);
+
+// 初次載入
+loadData();
 </script>
 
 </body>
