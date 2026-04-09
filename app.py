@@ -1,4 +1,3 @@
-
 from flask import Flask, request, jsonify, render_template
 import sqlite3
 from datetime import datetime
@@ -56,18 +55,7 @@ init_db()
 
 # ===== IP → 國家 =====
 
-from flask import Flask, request, jsonify, render_template
-import datetime
-import socket
-import requests
-import os
 
-app = Flask(__name__)
-
-attacks = []
-
-# 🔐 LINE Token（⚠️ 放你自己的）
-LINE_TOKEN = "你的_LINE_NOTIFY_TOKEN"
 
 # 🌍 IP 查位置
 def get_ip_info(ip):
