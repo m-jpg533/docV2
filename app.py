@@ -59,6 +59,23 @@ def test():
         })
 
     return "測試資料已加入"
+@app.before_request
+def detect_attack():
+    q = request.args.get("q", "")
 
+    # 🔥 偵測 XSS
+    if "<script>" in q.lower():
+        ip = request.remote_addr
+
+        lat, lon = get_ip_location(ip)
+
+        attack_logs.append({
+            "ip": ip,
+            "type": "XSS",
+            "lat": lat,
+            "lon": lon
+        })
+
+        print("🚨 偵測到 XSS 攻擊:", ip)
 if __name__ == "__main__":
     app.run(debug=True)
