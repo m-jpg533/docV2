@@ -3,42 +3,41 @@
 <html lang="zh-TW">
 <head>
 <meta charset="UTF-8">
-<title>🔥 SOC v3 攻擊地圖</title>
+<title>SOC v3 即時攻擊地圖</title>
 
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-<!-- Leaflet 地圖 -->
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
 
 <style>
-body {
-    margin: 0;
-    font-family: Arial;
-    background: #0b0f1a;
-    color: white;
+body { margin:0; font-family:Arial; background:black; }
+#map { height: 100vh; }
+
+#panel{
+    position:absolute;
+    top:20px;
+    left:20px;
+    background:rgba(0,0,0,0.7);
+    color:#00ffcc;
+    padding:15px;
+    border-radius:10px;
+    z-index:1000;
+    box-shadow:0 0 15px #00ffcc;
 }
 
-#map {
-    height: 100vh;
-}
-
-#title {
-    position: absolute;
-    top: 10px;
-    left: 10px;
-    z-index: 999;
-    background: rgba(0,0,0,0.6);
-    padding: 10px;
-    border-radius: 10px;
+.attack-dot{
+    background:red;
+    border-radius:50%;
+    width:10px;
+    height:10px;
+    box-shadow:0 0 10px red;
 }
 </style>
 </head>
 
 <body>
 
-<div id="title">
-    <h2>🌍 SOC 即時攻擊地圖</h2>
-    <div id="count">載入中...</div>
+<div id="panel">
+    <h2>🔥 SOC v3 攻擊地圖</h2>
+    <div>攻擊數量: <span id="count">0</span></div>
 </div>
 
 <div id="map"></div>
@@ -46,67 +45,90 @@ body {
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
 <script>
-const map = L.map('map').setView([20, 0], 2);
+var map = L.map('map').setView([20, 0], 2);
 
-// 地圖底圖
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 18
-}).addTo(map);
+// 黑色風格地圖
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
 
-let markers = [];
+// 目標（你的伺服器位置）
+var target = [25.03, 121.56]; // 台灣
 
-// 顏色判斷
-function getColor(level) {
-    if (level === "CRITICAL") return "red";
-    if (level === "HIGH") return "orange";
-    if (level === "MEDIUM") return "yellow";
-    return "blue";
+// 清除舊圖層
+var layers = [];
+
+function clearMap(){
+    layers.forEach(l => map.removeLayer(l));
+    layers = [];
 }
 
-// 載入攻擊資料
-async function loadData() {
-    try {
-        const res = await fetch("/attacks");
-        const data = await res.json();
+// 紅點
+function addAttackPoint(lat, lon){
+    let marker = L.circleMarker([lat, lon], {
+        radius:6,
+        color:'red',
+        fillColor:'red',
+        fillOpacity:0.9
+    }).addTo(map);
 
-        document.getElementById("count").innerText =
-            "攻擊數量: " + data.length;
+    layers.push(marker);
+}
 
-        // 清掉舊點
-        markers.forEach(m => map.removeLayer(m));
-        markers = [];
+// 飛線動畫
+function drawAttackLine(lat, lon){
+    let line = L.polyline([[lat, lon], target], {
+        color:'lime',
+        weight:2,
+        opacity:0.7
+    }).addTo(map);
 
-        data.forEach(item => {
-            const [ip, country, lat, lon, type, level, path, time] = item;
+    layers.push(line);
 
-            if (!lat || !lon) return;
+    // 閃一下消失（動畫感）
+    setTimeout(() => {
+        map.removeLayer(line);
+    }, 800);
+}
 
-            const marker = L.circleMarker([lat, lon], {
-                radius: 6,
-                color: getColor(level),
-                fillOpacity: 0.8
-            }).addTo(map);
+// 爆炸效果
+function hitEffect(){
+    let circle = L.circle(target, {
+        radius:200000,
+        color:'yellow',
+        fillColor:'yellow',
+        fillOpacity:0.3
+    }).addTo(map);
 
-            marker.bindPopup(`
-                <b>IP:</b> ${ip}<br>
-                <b>國家:</b> ${country}<br>
-                <b>類型:</b> ${type}<br>
-                <b>等級:</b> ${level}<br>
-                <b>時間:</b> ${time}
-            `);
+    setTimeout(()=>map.removeLayer(circle), 500);
+}
 
-            markers.push(marker);
+// 載入資料
+async function loadData(){
+    try{
+        let res = await fetch('/api/attacks');
+        let data = await res.json();
+
+        document.getElementById("count").innerText = data.length;
+
+        clearMap();
+
+        data.forEach(a=>{
+            if(a.lat && a.lon){
+                addAttackPoint(a.lat, a.lon);
+                drawAttackLine(a.lat, a.lon);
+            }
         });
 
-    } catch (e) {
-        console.error("載入失敗", e);
+        if(data.length > 0){
+            hitEffect();
+        }
+
+    }catch(e){
+        console.log("錯誤:", e);
     }
 }
 
 // 每5秒更新
 setInterval(loadData, 5000);
-
-// 初次載入
 loadData();
 </script>
 
