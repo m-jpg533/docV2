@@ -84,7 +84,7 @@ def detect_attack():
             "lat": lat,
             "lon": lon
         })
-
+send_line(f"🚨 XSS 攻擊\nIP:{ip}")
         print("🚨 偵測到 XSS 攻擊:", ip)
 if __name__ == "__main__":
     app.run(debug=True)
