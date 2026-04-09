@@ -1,3 +1,4 @@
+
 from flask import Flask, request, jsonify, render_template
 import sqlite3
 from datetime import datetime
@@ -26,7 +27,7 @@ def send_line(msg):
     }
     
     data = {
-    "to": LINE_USER_ID,   
+    "to": LINE_USER_ID,   ✅
     "messages":[{"type":"text","text":msg}]
 }
     requests.post(url, headers=headers, json=data)
@@ -54,100 +55,74 @@ def init_db():
 init_db()
 
 # ===== IP → 國家 =====
-
-
-
-# 🌍 IP 查位置
-def get_ip_info(ip):
+def get_country(ip):
     try:
-        res = requests.get(f"http://ip-api.com/json/{ip}", timeout=3).json()
-        return {
-            "country": res.get("country", "Unknown"),
-            "city": res.get("city", "Unknown"),
-            "lat": res.get("lat", 0),
-            "lon": res.get("lon", 0)
-        }
-    except:
-        return {"country": "Unknown", "city": "Unknown", "lat": 0, "lon": 0}
-
-# 🌐 DNS 解析
-def get_dns(ip):
-    try:
-        return socket.gethostbyaddr(ip)[0]
+        res = requests.get(f"http://ip-api.com/json/{ip}", timeout=2).json()
+        return res.get("country", "Unknown")
     except:
         return "Unknown"
 
-# 🚨 LINE 通知
-def send_line(msg):
-    try:
-        requests.post(
-            "https://notify-api.line.me/api/notify",
-            headers={"Authorization": f"Bearer {LINE_TOKEN}"},
-            data={"message": msg},
-            timeout=3
-        )
-    except:
-        pass
+# ===== 攻擊判斷 =====
+def detect_attack(path, args):
+    text = unquote(str(path) + str(args)).lower()
 
-# 🔍 攻擊偵測
-def detect_attack(q):
-    q = q.lower()
-    if "<script>" in q:
-        return "XSS"
-    if "union" in q or "' or 1=1" in q:
-        return "SQL Injection"
-    return None
+    if "<script" in text or "alert(" in text:
+        return "XSS", "HIGH"
+    if "login" in text or "admin" in text:
+        return "SCAN", "MEDIUM"
 
+    return "NORMAL", "LOW"
+
+# ===== SOC 核心 =====
+@app.before_request
+def soc():
+    ua = request.headers.get("User-Agent", "").lower()
+
+    if "facebookexternalhit" in ua or "line" in ua:
+        return
+
+    path = request.path
+    args = request.query_string.decode()
+
+    attack_type, level = detect_attack(path, args)
+
+    if attack_type != "NORMAL":
+        ip = request.headers.get("X-Forwarded-For", request.remote_addr)
+
+        country = get_country(ip)
+
+        print(f"🚨 {attack_type} {level} {ip} {country}")
+
+        conn = sqlite3.connect(DB)
+        c = conn.cursor()
+        c.execute("""
+        INSERT INTO attacks (ip, country, type, level, path, time)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """, (ip, country, attack_type, level, path, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+        conn.commit()
+        conn.close()
+
+        send_line(f"🚨{attack_type}\nIP:{ip}\n國家:{country}\n等級:{level}")
+
+# ===== API =====
+@app.route("/attacks")
+def attacks():
+    conn = sqlite3.connect(DB)
+    c = conn.cursor()
+    c.execute("SELECT ip,country,type,level,path,time FROM attacks ORDER BY id DESC LIMIT 50")
+    rows = c.fetchall()
+    conn.close()
+    return jsonify(rows)
+
+# ===== Dashboard =====
+@app.route("/dashboard")
+def dashboard():
+    return render_template("dashboard.html")
+
+# ===== 首頁 =====
 @app.route("/")
 def home():
-    q = request.args.get("q", "")
-    ip = request.headers.get("X-Forwarded-For", request.remote_addr)
+    return "SOC v2 Running 😎"
 
-    attack_type = detect_attack(q)
-
-    if attack_type:
-        info = get_ip_info(ip)
-        dns = get_dns(ip)
-
-        data = {
-            "time": str(datetime.datetime.now()),
-            "ip": ip,
-            "dns": dns,
-            "type": attack_type,
-            "country": info["country"],
-            "city": info["city"],
-            "lat": info["lat"],
-            "lon": info["lon"]
-        }
-
-        attacks.append(data)
-
-        print(f"🚨 {attack_type}: {ip}")
-
-        # 🔥 LINE 推播
-        msg = f"""
-🚨 SOC 警報
-類型: {attack_type}
-IP: {ip}
-DNS: {dns}
-國家: {info['country']} {info['city']}
-時間: {data['time']}
-"""
-        send_line(msg)
-
-    return render_template("index.html")
-
-@app.route("/api/attacks")
-def api():
-    return jsonify(attacks)
-
-# ❤️ 健康檢查（Render不卡）
-@app.route("/health")
-def health():
-    return "OK", 200
-
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
 if __name__ == "__main__":
     app.run()
