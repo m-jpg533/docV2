@@ -3,13 +3,13 @@
 <html lang="zh-TW">
 <head>
 <meta charset="UTF-8">
-<title>SOC v3 即時攻擊地圖</title>
+<title>SOC v3 攻擊地圖</title>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
 
 <style>
-body { margin:0; font-family:Arial; background:black; }
-#map { height: 100vh; }
+body { margin:0; background:black; }
+#map { height:100vh; }
 
 #panel{
     position:absolute;
@@ -20,15 +20,6 @@ body { margin:0; font-family:Arial; background:black; }
     padding:15px;
     border-radius:10px;
     z-index:1000;
-    box-shadow:0 0 15px #00ffcc;
-}
-
-.attack-dot{
-    background:red;
-    border-radius:50%;
-    width:10px;
-    height:10px;
-    box-shadow:0 0 10px red;
 }
 </style>
 </head>
@@ -36,8 +27,8 @@ body { margin:0; font-family:Arial; background:black; }
 <body>
 
 <div id="panel">
-    <h2>🔥 SOC v3 攻擊地圖</h2>
-    <div>攻擊數量: <span id="count">0</span></div>
+    <h2>🔥 SOC v3 即時攻擊</h2>
+    攻擊數量: <span id="count">0</span>
 </div>
 
 <div id="map"></div>
@@ -45,15 +36,13 @@ body { margin:0; font-family:Arial; background:black; }
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
 <script>
-var map = L.map('map').setView([20, 0], 2);
+var map = L.map('map').setView([20,0],2);
 
-// 黑色風格地圖
-L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png')
+.addTo(map);
 
-// 目標（你的伺服器位置）
-var target = [25.03, 121.56]; // 台灣
+var target = [25.03,121.56]; // 台灣
 
-// 清除舊圖層
 var layers = [];
 
 function clearMap(){
@@ -61,73 +50,44 @@ function clearMap(){
     layers = [];
 }
 
-// 紅點
-function addAttackPoint(lat, lon){
-    let marker = L.circleMarker([lat, lon], {
+function addPoint(lat, lon){
+    let m = L.circleMarker([lat, lon], {
         radius:6,
         color:'red',
         fillColor:'red',
         fillOpacity:0.9
     }).addTo(map);
 
-    layers.push(marker);
+    layers.push(m);
 }
 
-// 飛線動畫
-function drawAttackLine(lat, lon){
+function drawLine(lat, lon){
     let line = L.polyline([[lat, lon], target], {
-        color:'lime',
-        weight:2,
-        opacity:0.7
+        color:'lime'
     }).addTo(map);
 
     layers.push(line);
 
-    // 閃一下消失（動畫感）
-    setTimeout(() => {
-        map.removeLayer(line);
-    }, 800);
+    setTimeout(()=>map.removeLayer(line), 800);
 }
 
-// 爆炸效果
-function hitEffect(){
-    let circle = L.circle(target, {
-        radius:200000,
-        color:'yellow',
-        fillColor:'yellow',
-        fillOpacity:0.3
-    }).addTo(map);
-
-    setTimeout(()=>map.removeLayer(circle), 500);
-}
-
-// 載入資料
-async function loadData(){
-    try{
-        let res = await fetch('/api/attacks');
-        let data = await res.json();
-
+function loadData(){
+    fetch('/api/attacks')
+    .then(r=>r.json())
+    .then(data=>{
         document.getElementById("count").innerText = data.length;
 
         clearMap();
 
         data.forEach(a=>{
             if(a.lat && a.lon){
-                addAttackPoint(a.lat, a.lon);
-                drawAttackLine(a.lat, a.lon);
+                addPoint(a.lat, a.lon);
+                drawLine(a.lat, a.lon);
             }
         });
-
-        if(data.length > 0){
-            hitEffect();
-        }
-
-    }catch(e){
-        console.log("錯誤:", e);
-    }
+    });
 }
 
-// 每5秒更新
 setInterval(loadData, 5000);
 loadData();
 </script>
