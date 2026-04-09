@@ -27,7 +27,7 @@ def send_line(msg):
     }
     
     data = {
-    "to": LINE_USER_ID,   ✅
+    "to": LINE_USER_ID,   
     "messages":[{"type":"text","text":msg}]
 }
     requests.post(url, headers=headers, json=data)
